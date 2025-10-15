@@ -197,19 +197,23 @@ impl App {
                 descendants
             };
             
-            // Get all gerrit refs to exclude (like the gn function does)
-            let gerrit_output = std::process::Command::new("git")
-                .arg("for-each-ref")
-                .arg("--format=^%(refname:short)")
-                .arg("refs/remotes/gerrit/")
-                .current_dir(self.repository.path().parent().unwrap_or(self.repository.path()))
-                .output();
-            
-            if let Ok(gerrit_out) = gerrit_output {
-                let gerrit_refs = String::from_utf8_lossy(&gerrit_out.stdout);
-                for gerrit_ref in gerrit_refs.lines() {
-                    if !gerrit_ref.contains("sunmi") {
-                        cmd.arg(gerrit_ref);
+            // For master branch or branches with no descendants, don't exclude gerrit refs
+            // as it might exclude all commits
+            if branch_name != "master" && !descendant_branches.is_empty() {
+                // Get all gerrit refs to exclude (like the gn function does)
+                let gerrit_output = std::process::Command::new("git")
+                    .arg("for-each-ref")
+                    .arg("--format=^%(refname:short)")
+                    .arg("refs/remotes/gerrit/")
+                    .current_dir(self.repository.path().parent().unwrap_or(self.repository.path()))
+                    .output();
+                
+                if let Ok(gerrit_out) = gerrit_output {
+                    let gerrit_refs = String::from_utf8_lossy(&gerrit_out.stdout);
+                    for gerrit_ref in gerrit_refs.lines() {
+                        if !gerrit_ref.contains("sunmi") {
+                            cmd.arg(gerrit_ref);
+                        }
                     }
                 }
             }
