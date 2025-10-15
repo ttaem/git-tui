@@ -793,7 +793,7 @@ fn draw_ui(f: &mut Frame, app: &mut App) {
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(0), Constraint::Length(3)]) // Help takes 3 lines at bottom
-        .split(f.size());
+        .split(f.area());
     
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -1019,7 +1019,7 @@ fn draw_help(f: &mut Frame, app: &App, area: Rect) {
 
 fn draw_diff_overlay(f: &mut Frame, app: &mut App) {
     // Create a centered overlay that takes 90% of the screen
-    let area = f.size();
+    let area = f.area();
     let popup_area = Rect {
         x: area.width / 20, // 5% margin
         y: area.height / 20, // 5% margin  
