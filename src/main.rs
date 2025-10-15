@@ -68,6 +68,9 @@ struct App {
     // Cache for performance
     descendant_cache: HashMap<String, Vec<String>>,
     branch_commit_cache: HashMap<String, String>,
+    // Branch search
+    search_mode: bool,
+    search_query: String,
 }
 
 impl App {
@@ -92,6 +95,8 @@ impl App {
             diff_scroll_offset: 0,
             descendant_cache: HashMap::new(),
             branch_commit_cache: HashMap::new(),
+            search_mode: false,
+            search_query: String::new(),
         };
         
         app.load_branches()?;
@@ -790,6 +795,32 @@ impl App {
         let max_scroll = self.get_max_diff_scroll(visible_height);
         self.diff_scroll_offset = self.diff_scroll_offset.min(max_scroll);
     }
+    
+    fn search_branch(&mut self) {
+        if self.search_query.is_empty() {
+            return;
+        }
+        
+        let query_lower = self.search_query.to_lowercase();
+        
+        // Search from current position forward
+        for i in (self.selected_branch + 1)..self.branches.len() {
+            if self.branches[i].name.to_lowercase().contains(&query_lower) {
+                self.selected_branch = i;
+                self.branch_list_state.select(Some(i));
+                return;
+            }
+        }
+        
+        // Wrap around: search from beginning to current position
+        for i in 0..=self.selected_branch {
+            if self.branches[i].name.to_lowercase().contains(&query_lower) {
+                self.selected_branch = i;
+                self.branch_list_state.select(Some(i));
+                return;
+            }
+        }
+    }
 }
 
 fn draw_ui(f: &mut Frame, app: &mut App) {
@@ -863,7 +894,11 @@ fn draw_branches(f: &mut Frame, app: &mut App, area: Rect) {
         })
         .collect();
     
-    let title = "Branches";
+    let title = if app.search_mode {
+        format!("Branches [Search: {}]", app.search_query)
+    } else {
+        "Branches".to_string()
+    };
     
     // Highlight the border when this panel is focused
     let border_style = if !app.show_logs {
@@ -1005,10 +1040,12 @@ fn draw_commit_details(f: &mut Frame, app: &App, area: Rect) {
 fn draw_help(f: &mut Frame, app: &App, area: Rect) {
     let help_text = if app.show_diff {
         "Esc/q: close diff  ↑/↓/j/k: scroll  PgUp/PgDn: scroll fast"
+    } else if app.search_mode {
+        "Esc: cancel search  Enter: find next  Backspace: delete char  Type to search"
     } else if app.show_logs {
         "Tab/h/l: switch panel  c: clear filter  r: refresh  q: quit  |  ↑/↓/j/k: navigate  PgUp/PgDn: scroll  Enter: diff"
     } else {
-        "Tab/h/l: switch panel  c: clear filter  r: refresh  q: quit  |  ↑/↓/j/k: navigate  Enter: select branch"
+        "Tab/h/l: switch panel  c: clear filter  r: refresh  q: quit  |  ↑/↓/j/k: navigate  Enter: select  /: search"
     };
     
     let help = Paragraph::new(help_text)
@@ -1078,6 +1115,31 @@ fn handle_events(app: &mut App) -> Result<bool> {
     if event::poll(std::time::Duration::from_millis(50))? { // Reduced timeout for faster response
         if let Event::Key(key) = event::read()? {
             if key.kind == KeyEventKind::Press {
+                // Handle search mode
+                if app.search_mode {
+                    match key.code {
+                        KeyCode::Esc => {
+                            app.search_mode = false;
+                            app.search_query.clear();
+                            return Ok(false);
+                        }
+                        KeyCode::Enter => {
+                            app.search_branch();
+                            return Ok(false);
+                        }
+                        KeyCode::Backspace => {
+                            app.search_query.pop();
+                            return Ok(false);
+                        }
+                        KeyCode::Char(c) => {
+                            app.search_query.push(c);
+                            return Ok(false);
+                        }
+                        _ => {}
+                    }
+                    return Ok(false);
+                }
+                
                 // Handle diff view separately
                 if app.show_diff {
                     match key.code {
@@ -1120,6 +1182,13 @@ fn handle_events(app: &mut App) -> Result<bool> {
                 
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
+                    KeyCode::Char('/') => {
+                        // Enter search mode only when in branch panel
+                        if !app.show_logs {
+                            app.search_mode = true;
+                            app.search_query.clear();
+                        }
+                    }
                     KeyCode::Up | KeyCode::Char('k') => {
                         if app.show_logs {
                             app.previous_commit();
